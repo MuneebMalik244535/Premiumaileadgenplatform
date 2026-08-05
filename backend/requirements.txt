@@ -1,0 +1,29 @@
+# SQLAlchemy DB & Migrations
+SQLAlchemy==2.0.28
+psycopg2-binary>=2.9.9
+alembic>=1.13.1
+
+# Data & AI
+pandas==2.2.1
+google-generativeai
+python-dotenv==1.0.1
+requests==2.31.0
+beautifulsoup4==4.12.3
+playwright
+playwright-stealth
+fpdf2
+
+# API Server & Auth
+fastapi
+uvicorn[standard]
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt>=4.0.1
+pydantic
+
+# Async & Task Queue
+websockets
+celery
+redis
+gevent
+

@@ -1,0 +1,45 @@
+"""
+SQLAlchemy ORM Models for Lead Generator database.
+"""
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
+from database import Base
+
+class Lead(Base):
+    __tablename__ = "leads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False, index=True)
+    score = Column(Integer, default=0, index=True)
+    email = Column(String(255), default="N/A", index=True)
+    phone = Column(String(100), default="N/A")
+    address = Column(Text, default="N/A")
+    link = Column(String(500), nullable=False)
+    snippet = Column(Text, default="")
+    query = Column(String(255), default="", index=True)
+    added_date = Column(String(50), default=lambda: datetime.utcnow().strftime("%Y-%m-%d"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class ScrapeTask(Base):
+    __tablename__ = "scrape_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(String(100), unique=True, index=True, nullable=False)
+    query = Column(String(255), nullable=False)
+    status = Column(String(50), default="PROGRESS", index=True) # PROGRESS, SUCCESS, FAILURE
+    progress_message = Column(Text, default="Queued...")
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class Report(Base):
+    __tablename__ = "reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    report_type = Column(String(50), default="Custom") # Quarterly, Monthly, Industry, Custom
+    leads_count = Column(Integer, default=0)
+    avg_score = Column(Integer, default=0)
+    filename = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
