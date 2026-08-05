@@ -17,6 +17,22 @@ from scraper_service import LeadScraper
 from redis_client import subscribe_log, publish_log
 from tasks import scrape_leads_task
 
+# ── Sentry Error Tracking Setup ────────────────────────────────────────────────
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+if SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.celery import CeleryIntegration
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            integrations=[FastApiIntegration(), CeleryIntegration()],
+            traces_sample_rate=1.0,
+            environment=os.getenv("ENVIRONMENT", "production")
+        )
+    except Exception as e:
+        print(f"[Sentry Init Warning]: {e}")
+
 # Create DB tables
 Base.metadata.create_all(bind=engine)
 
@@ -25,6 +41,37 @@ app = FastAPI(
     version="2.0.0",
     description="Production-grade B2B Lead Scraping & AI Qualification API"
 )
+
+# ── Prometheus Metrics & Telemetry Setup ──────────────────────────────────────
+try:
+    from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+    from fastapi.responses import Response
+
+    HTTP_REQUESTS_TOTAL = Counter(
+        "http_requests_total",
+        "Total HTTP requests handled by FastAPI server",
+        ["method", "endpoint", "status"]
+    )
+
+    CELERY_TASKS_DISPATCHED = Counter(
+        "celery_tasks_dispatched_total",
+        "Total count of background Celery lead scraping tasks dispatched"
+    )
+
+    @app.middleware("http")
+    async def prometheus_middleware(request, call_next):
+        response = await call_next(request)
+        endpoint = request.url.path
+        if endpoint != "/metrics":
+            HTTP_REQUESTS_TOTAL.labels(method=request.method, endpoint=endpoint, status=str(response.status_code)).inc()
+        return response
+
+    @app.get("/metrics")
+    async def get_metrics():
+        return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+except Exception as e:
+    print(f"[Prometheus Init Warning]: {e}")
 
 # CORS configuration from env
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000,*").split(",")]

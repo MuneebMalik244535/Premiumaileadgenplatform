@@ -21,9 +21,9 @@ passlib[bcrypt]
 bcrypt>=4.0.1
 pydantic
 
-# Async & Task Queue
-websockets
-celery
-redis
-gevent
+# Observability & Metrics
+prometheus-client>=0.19.0
+prometheus-fastapi-instrumentator>=6.1.0
+sentry-sdk[fastapi,celery]>=1.40.0
+
 
