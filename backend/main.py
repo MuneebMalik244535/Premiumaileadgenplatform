@@ -416,6 +416,66 @@ async def download_report(
     return FileResponse(filename, media_type="application/pdf", filename="leads_report.pdf")
 
 
+# ── Webhook Management Endpoints ─────────────────────────────────────────────
+
+from webhooks import dispatch_webhook_event
+
+class WebhookCreateRequest(BaseModel):
+    url: str
+    secret: Optional[str] = None
+    events: Optional[str] = "*"
+
+
+@app.post("/api/webhooks")
+async def create_webhook(
+    request: WebhookCreateRequest,
+    db: Session = Depends(get_db),
+    tenant_user: auth.TokenData = Depends(auth.get_current_tenant_user)
+):
+    if not tenant_user.organization_id:
+        raise HTTPException(status_code=400, detail="Organization ID required for webhooks")
+    secret = request.secret or f"whsec_{uuid.uuid4().hex}"
+    sub = crud.create_webhook_subscription(
+        db,
+        organization_id=tenant_user.organization_id,
+        url=request.url,
+        secret=secret,
+        events=request.events or "*"
+    )
+    return {
+        "id": sub.id,
+        "url": sub.url,
+        "secret": sub.secret,
+        "events": sub.events,
+        "created_at": sub.created_at
+    }
+
+
+@app.get("/api/webhooks")
+async def get_webhooks(
+    db: Session = Depends(get_db),
+    tenant_user: auth.TokenData = Depends(auth.get_current_tenant_user)
+):
+    if not tenant_user.organization_id:
+        return []
+    subs = crud.get_webhook_subscriptions(db, organization_id=tenant_user.organization_id)
+    return subs
+
+
+@app.delete("/api/webhooks/{subscription_id}")
+async def delete_webhook(
+    subscription_id: int,
+    db: Session = Depends(get_db),
+    tenant_user: auth.TokenData = Depends(auth.get_current_tenant_user)
+):
+    if not tenant_user.organization_id:
+        raise HTTPException(status_code=400, detail="Organization ID required")
+    success = crud.delete_webhook_subscription(db, subscription_id=subscription_id, organization_id=tenant_user.organization_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Webhook subscription not found")
+    return {"status": "deleted", "id": subscription_id}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

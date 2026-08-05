@@ -128,3 +128,34 @@ def get_reports(db: Session, organization_id: Optional[int] = None) -> List[mode
     if organization_id is not None:
         q = q.filter(models.Report.organization_id == organization_id)
     return q.order_by(models.Report.created_at.desc()).all()
+
+
+# ── Webhook Subscriptions CRUD ────────────────────────────────────────────────
+
+def create_webhook_subscription(db: Session, organization_id: int, url: str, secret: str, events: str = "*") -> models.WebhookSubscription:
+    sub = models.WebhookSubscription(
+        organization_id=organization_id,
+        url=url,
+        secret=secret,
+        events=events
+    )
+    db.add(sub)
+    db.commit()
+    db.refresh(sub)
+    return sub
+
+def get_webhook_subscriptions(db: Session, organization_id: int) -> List[models.WebhookSubscription]:
+    return db.query(models.WebhookSubscription).filter(
+        models.WebhookSubscription.organization_id == organization_id
+    ).order_by(models.WebhookSubscription.created_at.desc()).all()
+
+def delete_webhook_subscription(db: Session, subscription_id: int, organization_id: int) -> bool:
+    sub = db.query(models.WebhookSubscription).filter(
+        models.WebhookSubscription.id == subscription_id,
+        models.WebhookSubscription.organization_id == organization_id
+    ).first()
+    if sub:
+        db.delete(sub)
+        db.commit()
+        return True
+    return False
