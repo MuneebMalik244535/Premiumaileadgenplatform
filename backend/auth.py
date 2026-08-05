@@ -48,10 +48,17 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     username: Optional[str] = None
+    organization_id: Optional[int] = None
 
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+class RegisterRequest(BaseModel):
+    organization_name: str
+    email: str
+    password: str
+    full_name: Optional[str] = None
 
 def authenticate_admin(username: str, password: str) -> bool:
     if username != ADMIN_USERNAME:
@@ -74,15 +81,34 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if not token:
+        raise credentials_exception
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+        org_id: Optional[int] = payload.get("org_id")
         if username is None:
             raise credentials_exception
-        token_data = TokenData(username=username)
+        token_data = TokenData(username=username, organization_id=org_id)
     except JWTError:
         raise credentials_exception
         
-    if token_data.username != ADMIN_USERNAME:
-        raise credentials_exception
     return token_data.username
+
+async def get_current_tenant_user(token: str = Depends(oauth2_scheme)) -> TokenData:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate tenant credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    if not token:
+        raise credentials_exception
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        org_id: Optional[int] = payload.get("org_id")
+        if username is None:
+            raise credentials_exception
+        return TokenData(username=username, organization_id=org_id)
+    except JWTError:
+        raise credentials_exception

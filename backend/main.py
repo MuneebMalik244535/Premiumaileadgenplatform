@@ -159,16 +159,60 @@ async def healthz(db: Session = Depends(get_db)):
 
 # ── Auth Endpoints ────────────────────────────────────────────────────────────
 
-@app.post("/api/auth/login", response_model=auth.Token)
-async def login(request: auth.LoginRequest):
-    if not auth.authenticate_admin(request.username, request.password):
+@app.post("/api/auth/register", response_model=auth.Token)
+async def register_organization(
+    request: auth.RegisterRequest,
+    db: Session = Depends(get_db)
+):
+    import re
+    slug = re.sub(r"[^a-z0-9]+", "-", request.organization_name.lower()).strip("-")
+    if not slug:
+        slug = f"org-{uuid.uuid4().hex[:6]}"
+
+    existing_org = crud.get_organization_by_slug(db, slug)
+    if existing_org:
+        slug = f"{slug}-{uuid.uuid4().hex[:4]}"
+
+    existing_user = crud.get_user_by_email(db, request.email)
+    if existing_user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User with this email already exists"
         )
-    access_token = auth.create_access_token(data={"sub": request.username})
+
+    org = crud.create_organization(db, name=request.organization_name, slug=slug)
+    hashed_pw = auth.get_password_hash(request.password)
+    user = crud.create_user(
+        db,
+        email=request.email,
+        hashed_password=hashed_pw,
+        organization_id=org.id,
+        full_name=request.full_name,
+        role="owner"
+    )
+
+    access_token = auth.create_access_token(data={"sub": user.email, "org_id": org.id})
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.post("/api/auth/login", response_model=auth.Token)
+async def login(request: auth.LoginRequest, db: Session = Depends(get_db)):
+    # 1. Check if login matches registered tenant user
+    user = crud.get_user_by_email(db, request.username)
+    if user and auth.verify_password(request.password, user.hashed_password):
+        access_token = auth.create_access_token(data={"sub": user.email, "org_id": user.organization_id})
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    # 2. Fallback check for single admin account
+    if auth.authenticate_admin(request.username, request.password):
+        access_token = auth.create_access_token(data={"sub": request.username, "org_id": None})
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Incorrect username or password",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 # ── Leads Endpoints ───────────────────────────────────────────────────────────
@@ -180,9 +224,16 @@ async def get_leads(
     skip: int = 0,
     limit: int = 200,
     db: Session = Depends(get_db),
-    current_user: str = Depends(auth.get_current_user)
+    tenant_user: auth.TokenData = Depends(auth.get_current_tenant_user)
 ):
-    leads = crud.get_leads(db, skip=skip, limit=limit, query=query, min_score=min_score)
+    leads = crud.get_leads(
+        db,
+        skip=skip,
+        limit=limit,
+        query=query,
+        min_score=min_score,
+        organization_id=tenant_user.organization_id
+    )
     return leads
 
 
@@ -191,14 +242,14 @@ async def start_scrape(
     request: ScrapeRequest,
     bg_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: str = Depends(auth.get_current_user)
+    tenant_user: auth.TokenData = Depends(auth.get_current_tenant_user)
 ):
     use_celery = os.getenv("USE_CELERY", "false").lower() == "true"
     
     if use_celery:
         celery_task = scrape_leads_task.delay(request.query)
         task_id = celery_task.id
-        crud.create_task(db, task_id=task_id, query=request.query)
+        crud.create_task(db, task_id=task_id, query=request.query, organization_id=tenant_user.organization_id)
     else:
         task_id = str(uuid.uuid4())
         local_tasks[task_id] = {
@@ -220,7 +271,7 @@ async def start_scrape(
 async def get_task_status(
     task_id: str,
     db: Session = Depends(get_db),
-    current_user: str = Depends(auth.get_current_user)
+    tenant_user: auth.TokenData = Depends(auth.get_current_tenant_user)
 ):
     task = crud.get_task(db, task_id)
     if task:
@@ -272,7 +323,7 @@ async def stream_task_logs(task_id: str, websocket: WebSocket):
                 from database import SessionLocal
                 db = SessionLocal()
                 task = crud.get_task(db, task_id)
-                leads = crud.get_leads(db, query=task.query if task else None)
+                leads = crud.get_leads(db, query=task.query if task else None, organization_id=task.organization_id if task else None)
                 db.close()
                 lead_dicts = [
                     {
@@ -299,9 +350,9 @@ async def stream_task_logs(task_id: str, websocket: WebSocket):
 @app.get("/api/reports")
 async def get_reports(
     db: Session = Depends(get_db),
-    current_user: str = Depends(auth.get_current_user)
+    tenant_user: auth.TokenData = Depends(auth.get_current_tenant_user)
 ):
-    return crud.get_reports(db)
+    return crud.get_reports(db, organization_id=tenant_user.organization_id)
 
 
 @app.post("/api/reports/generate")
@@ -309,9 +360,9 @@ async def generate_report(
     report_type: str = "Custom",
     title: str = "AI Lead Generation Report",
     db: Session = Depends(get_db),
-    current_user: str = Depends(auth.get_current_user)
+    tenant_user: auth.TokenData = Depends(auth.get_current_tenant_user)
 ):
-    leads = crud.get_leads(db, limit=50)
+    leads = crud.get_leads(db, limit=50, organization_id=tenant_user.organization_id)
     if not leads:
         raise HTTPException(status_code=400, detail="No leads available to generate report")
     
@@ -333,7 +384,8 @@ async def generate_report(
     avg_score = sum(l.score for l in leads) / len(leads) if leads else 0
     report = crud.create_report(
         db, title=title, report_type=report_type,
-        leads_count=len(leads), avg_score=avg_score, filename=filepath
+        leads_count=len(leads), avg_score=avg_score, filename=filepath,
+        organization_id=tenant_user.organization_id
     )
     return report
 
@@ -341,9 +393,9 @@ async def generate_report(
 @app.get("/api/download-report")
 async def download_report(
     db: Session = Depends(get_db),
-    current_user: str = Depends(auth.get_current_user)
+    tenant_user: auth.TokenData = Depends(auth.get_current_tenant_user)
 ):
-    leads = crud.get_leads(db, limit=50)
+    leads = crud.get_leads(db, limit=50, organization_id=tenant_user.organization_id)
     if not leads:
         return {"error": "No leads found."}
     

@@ -5,18 +5,54 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 import models
 
-def get_leads(db: Session, skip: int = 0, limit: int = 200, query: Optional[str] = None, min_score: int = 0) -> List[models.Lead]:
+# ── Multi-Tenant Organization & User CRUD ─────────────────────────────────────
+
+def create_organization(db: Session, name: str, slug: str) -> models.Organization:
+    org = models.Organization(name=name, slug=slug)
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    return org
+
+def get_organization_by_slug(db: Session, slug: str) -> Optional[models.Organization]:
+    return db.query(models.Organization).filter(models.Organization.slug == slug).first()
+
+def create_user(db: Session, email: str, hashed_password: str, organization_id: int, full_name: Optional[str] = None, role: str = "member") -> models.User:
+    user = models.User(
+        email=email,
+        hashed_password=hashed_password,
+        organization_id=organization_id,
+        full_name=full_name,
+        role=role
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+def get_user_by_email(db: Session, email: str) -> Optional[models.User]:
+    return db.query(models.User).filter(models.User.email == email).first()
+
+
+# ── Tenant-Isolated Data Operations ───────────────────────────────────────────
+
+def get_leads(db: Session, skip: int = 0, limit: int = 200, query: Optional[str] = None, min_score: int = 0, organization_id: Optional[int] = None) -> List[models.Lead]:
     q = db.query(models.Lead)
+    if organization_id is not None:
+        q = q.filter(models.Lead.organization_id == organization_id)
     if query:
         q = q.filter(models.Lead.query.ilike(f"%{query}%") | models.Lead.name.ilike(f"%{query}%") | models.Lead.email.ilike(f"%{query}%"))
     if min_score > 0:
         q = q.filter(models.Lead.score >= min_score)
     return q.order_by(models.Lead.score.desc()).offset(skip).limit(limit).all()
 
-def save_lead(db: Session, lead_dict: dict, search_query: str) -> models.Lead:
-    existing = db.query(models.Lead).filter(models.Lead.link == lead_dict.get("link")).first()
+def save_lead(db: Session, lead_dict: dict, search_query: str, organization_id: Optional[int] = None) -> models.Lead:
+    q = db.query(models.Lead).filter(models.Lead.link == lead_dict.get("link"))
+    if organization_id is not None:
+        q = q.filter(models.Lead.organization_id == organization_id)
+    existing = q.first()
+
     if existing:
-        # Update existing lead fields
         existing.name = lead_dict.get("name", existing.name)
         existing.score = lead_dict.get("score", existing.score)
         existing.email = lead_dict.get("email", existing.email)
@@ -28,6 +64,7 @@ def save_lead(db: Session, lead_dict: dict, search_query: str) -> models.Lead:
         return existing
     
     new_lead = models.Lead(
+        organization_id=organization_id,
         name=lead_dict.get("name", lead_dict.get("title", "Unknown")),
         score=lead_dict.get("score", 0),
         email=lead_dict.get("email", "N/A"),
@@ -42,14 +79,14 @@ def save_lead(db: Session, lead_dict: dict, search_query: str) -> models.Lead:
     db.refresh(new_lead)
     return new_lead
 
-def save_leads_batch(db: Session, leads: List[dict], search_query: str) -> List[models.Lead]:
+def save_leads_batch(db: Session, leads: List[dict], search_query: str, organization_id: Optional[int] = None) -> List[models.Lead]:
     saved = []
     for l in leads:
-        saved.append(save_lead(db, l, search_query))
+        saved.append(save_lead(db, l, search_query, organization_id=organization_id))
     return saved
 
-def create_task(db: Session, task_id: str, query: str) -> models.ScrapeTask:
-    task = models.ScrapeTask(task_id=task_id, query=query, status="PROGRESS")
+def create_task(db: Session, task_id: str, query: str, organization_id: Optional[int] = None) -> models.ScrapeTask:
+    task = models.ScrapeTask(task_id=task_id, query=query, status="PROGRESS", organization_id=organization_id)
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -72,8 +109,9 @@ def update_task_status(db: Session, task_id: str, status: str, error: Optional[s
 def get_task(db: Session, task_id: str) -> Optional[models.ScrapeTask]:
     return db.query(models.ScrapeTask).filter(models.ScrapeTask.task_id == task_id).first()
 
-def create_report(db: Session, title: str, report_type: str, leads_count: int, avg_score: float, filename: str) -> models.Report:
+def create_report(db: Session, title: str, report_type: str, leads_count: int, avg_score: float, filename: str, organization_id: Optional[int] = None) -> models.Report:
     rep = models.Report(
+        organization_id=organization_id,
         title=title,
         report_type=report_type,
         leads_count=leads_count,
@@ -85,5 +123,8 @@ def create_report(db: Session, title: str, report_type: str, leads_count: int, a
     db.refresh(rep)
     return rep
 
-def get_reports(db: Session) -> List[models.Report]:
-    return db.query(models.Report).order_by(models.Report.created_at.desc()).all()
+def get_reports(db: Session, organization_id: Optional[int] = None) -> List[models.Report]:
+    q = db.query(models.Report)
+    if organization_id is not None:
+        q = q.filter(models.Report.organization_id == organization_id)
+    return q.order_by(models.Report.created_at.desc()).all()

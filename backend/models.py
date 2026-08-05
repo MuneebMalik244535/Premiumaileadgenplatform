@@ -6,10 +6,37 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from database import Base
 
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    slug = Column(String(100), unique=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    users = relationship("User", back_populates="organization", cascade="all, delete-orphan")
+    leads = relationship("Lead", back_populates="organization", cascade="all, delete-orphan")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=True)
+    role = Column(String(50), default="member") # owner, admin, member
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    organization = relationship("Organization", back_populates="users")
+
+
 class Lead(Base):
     __tablename__ = "leads"
 
     id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
     name = Column(String(255), nullable=False, index=True)
     score = Column(Integer, default=0, index=True)
     email = Column(String(255), default="N/A", index=True)
@@ -21,10 +48,14 @@ class Lead(Base):
     added_date = Column(String(50), default=lambda: datetime.utcnow().strftime("%Y-%m-%d"))
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    organization = relationship("Organization", back_populates="leads")
+
+
 class ScrapeTask(Base):
     __tablename__ = "scrape_tasks"
 
     id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
     task_id = Column(String(100), unique=True, index=True, nullable=False)
     query = Column(String(255), nullable=False)
     status = Column(String(50), default="PROGRESS", index=True) # PROGRESS, SUCCESS, FAILURE
@@ -33,10 +64,12 @@ class ScrapeTask(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
 class Report(Base):
     __tablename__ = "reports"
 
     id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
     title = Column(String(255), nullable=False)
     report_type = Column(String(50), default="Custom") # Quarterly, Monthly, Industry, Custom
     leads_count = Column(Integer, default=0)
