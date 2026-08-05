@@ -2,8 +2,10 @@
 .env
 *.env
 !.env.example
+backend/.env
+frontend/.env
 
-# Python & Backend
+# Python & Virtual Environments
 __pycache__/
 *.py[cod]
 *$py.class
@@ -12,34 +14,52 @@ __pycache__/
 env/
 venv/
 ENV/
-env.bak/
-venv.bak/
+.venv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Database & Storage
 *.db
 *.sqlite3
-leads.db
-reports/*.pdf
-!reports/.gitkeep
+backend/leads.db
+backend/reports/*.pdf
+backend/reports/report_*.pdf
+!backend/reports/.gitkeep
 
-# Node.js & Frontend
+# Node.js & Frontend dependencies
 node_modules/
+frontend/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
 .pnpm-debug.log*
-frontend/node_modules/
+
+# Frontend Build Output
 frontend/dist/
 frontend/build/
-.dist/
+.next/
+.out/
 
-# IDE & OS Files
-.DS_Store
-Thumbs.db
-.vscode/
+# IDEs & System Files
 .idea/
+.vscode/
 *.swp
 *.swo
+.DS_Store
+Thumbs.db
 
-# Gemini / Antigravity IDE Scratch
-.gemini/
-.antigravity/
+# OS / Temporary files
+*.log
