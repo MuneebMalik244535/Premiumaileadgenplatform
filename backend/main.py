@@ -491,6 +491,46 @@ async def get_audit_trail(
     return logs
 
 
+# ── Product Analytics & User Behavior Endpoints ──────────────────────────────
+
+class AnalyticsTrackRequest(BaseModel):
+    session_id: str
+    page_path: str
+    duration_seconds: int = 0
+    click_target: Optional[str] = ""
+    user_email: Optional[str] = None
+    referrer: Optional[str] = ""
+
+
+@app.post("/api/analytics/track")
+async def track_analytics(
+    request_data: AnalyticsTrackRequest,
+    raw_request: Request,
+    db: Session = Depends(get_db)
+):
+    ip, ua = extract_client_info(raw_request)
+    evt = crud.track_page_view_event(
+        db,
+        session_id=request_data.session_id,
+        page_path=request_data.page_path,
+        duration_seconds=request_data.duration_seconds,
+        click_target=request_data.click_target or "",
+        user_email=request_data.user_email,
+        ip_address=ip,
+        user_agent=ua,
+        referrer=request_data.referrer or ""
+    )
+    return {"status": "ok", "event_id": evt.id}
+
+
+@app.get("/api/analytics/summary")
+async def get_analytics_summary(
+    db: Session = Depends(get_db),
+    tenant_user: auth.TokenData = Depends(auth.get_current_tenant_user)
+):
+    return crud.get_analytics_summary(db)
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

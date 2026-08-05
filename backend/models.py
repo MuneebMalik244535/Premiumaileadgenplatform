@@ -105,3 +105,18 @@ class AuditLog(Base):
     user_agent = Column(String(255), default="")
     details = Column(Text, default="")
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class PageViewEvent(Base):
+    __tablename__ = "page_view_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String(100), nullable=False, index=True)
+    user_email = Column(String(255), nullable=True, index=True)
+    page_path = Column(String(255), nullable=False, index=True)
+    duration_seconds = Column(Integer, default=0)
+    click_target = Column(String(255), default="")
+    referrer = Column(String(255), default="")
+    ip_address = Column(String(100), default="127.0.0.1")
+    user_agent = Column(String(255), default="")
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

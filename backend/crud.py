@@ -168,3 +168,69 @@ def get_audit_logs(db: Session, organization_id: Optional[int] = None, skip: int
     if organization_id is not None:
         q = q.filter(models.AuditLog.organization_id == organization_id)
     return q.order_by(models.AuditLog.created_at.desc()).offset(skip).limit(limit).all()
+
+
+# ── User Behavior & Analytics CRUD ──────────────────────────────────────────
+
+def track_page_view_event(
+    db: Session,
+    session_id: str,
+    page_path: str,
+    duration_seconds: int = 0,
+    click_target: str = "",
+    user_email: Optional[str] = None,
+    ip_address: str = "127.0.0.1",
+    user_agent: str = "",
+    referrer: str = ""
+) -> models.PageViewEvent:
+    evt = models.PageViewEvent(
+        session_id=session_id,
+        user_email=user_email,
+        page_path=page_path,
+        duration_seconds=duration_seconds,
+        click_target=click_target,
+        referrer=referrer,
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
+    db.add(evt)
+    db.commit()
+    db.refresh(evt)
+    return evt
+
+def get_analytics_summary(db: Session) -> dict:
+    from sqlalchemy import func
+    
+    total_events = db.query(func.count(models.PageViewEvent.id)).scalar() or 0
+    unique_sessions = db.query(func.count(func.distinct(models.PageViewEvent.session_id))).scalar() or 0
+    
+    page_stats = db.query(
+        models.PageViewEvent.page_path,
+        func.count(models.PageViewEvent.id).label("views"),
+        func.avg(models.PageViewEvent.duration_seconds).label("avg_duration")
+    ).group_by(models.PageViewEvent.page_path).order_by(func.count(models.PageViewEvent.id).desc()).all()
+    
+    pages = [
+        {"page_path": p[0], "views": p[1], "avg_duration_seconds": round(float(p[2] or 0), 1)}
+        for p in page_stats
+    ]
+
+    click_stats = db.query(
+        models.PageViewEvent.click_target,
+        func.count(models.PageViewEvent.id).label("clicks")
+    ).filter(models.PageViewEvent.click_target != "").group_by(models.PageViewEvent.click_target).order_by(func.count(models.PageViewEvent.id).desc()).limit(10).all()
+
+    clicks = [
+        {"target": c[0], "clicks": c[1]}
+        for c in click_stats
+    ]
+
+    recent_events = db.query(models.PageViewEvent).order_by(models.PageViewEvent.created_at.desc()).limit(50).all()
+
+    return {
+        "total_events": total_events,
+        "unique_sessions": unique_sessions,
+        "page_performance": pages,
+        "popular_clicks": clicks,
+        "recent_events": recent_events
+    }

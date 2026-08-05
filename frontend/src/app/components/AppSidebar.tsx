@@ -8,7 +8,8 @@ import {
   HelpCircle,
   CreditCard,
   Activity,
-  ShieldCheck
+  ShieldCheck,
+  BarChart2
 } from "lucide-react";
 import { Link, useLocation } from "react-router";
 import { auth } from "../../lib/auth";
@@ -31,6 +32,7 @@ const navItems = [
   { path: "/leads", label: "Leads", icon: Users },
   { path: "/reports", label: "Reports", icon: FileText },
   { path: "/telemetry", label: "Telemetry", icon: Activity },
+  { path: "/behavior", label: "User Analytics", icon: BarChart2 },
 ];
 
 const secondaryItems = [
