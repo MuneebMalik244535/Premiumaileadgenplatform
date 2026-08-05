@@ -237,6 +237,8 @@ async def get_leads(
     return leads
 
 
+from rate_limiter import check_rate_limit
+
 @app.post("/api/scrape")
 async def start_scrape(
     request: ScrapeRequest,
@@ -244,6 +246,9 @@ async def start_scrape(
     db: Session = Depends(get_db),
     tenant_user: auth.TokenData = Depends(auth.get_current_tenant_user)
 ):
+    # Enforce Redis Sliding Window Rate Limit
+    check_rate_limit(identifier=tenant_user.username, endpoint="scrape", tier="tier1_free")
+
     use_celery = os.getenv("USE_CELERY", "false").lower() == "true"
     
     if use_celery:
