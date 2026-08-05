@@ -4,6 +4,7 @@ import { Dashboard } from "./components/Dashboard";
 import { AISearch } from "./components/AISearch";
 import { LeadsManagement } from "./components/LeadsManagement";
 import { Reports } from "./components/Reports";
+import { Settings } from "./components/Settings";
 import { Login } from "./components/Login";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
@@ -24,6 +25,7 @@ export const router = createBrowserRouter([
       { path: "search", Component: AISearch },
       { path: "leads", Component: LeadsManagement },
       { path: "reports", Component: Reports },
+      { path: "settings", Component: Settings },
     ],
   },
 ]);

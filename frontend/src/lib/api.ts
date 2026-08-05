@@ -63,6 +63,27 @@ export const api = {
   },
 
   /**
+   * Helper method for REST DELETE requests
+   */
+  async delete<T = any>(endpoint: string): Promise<T> {
+    const url = `${API_BASE_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
+    const response = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        ...auth.getAuthHeader(),
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `HTTP Error ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  /**
    * Dynamically resolves the WebSocket URL for live task log streaming.
    */
   getWsUrl(): string {
