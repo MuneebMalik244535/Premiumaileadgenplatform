@@ -6,7 +6,8 @@ import {
   Zap,
   Settings,
   HelpCircle,
-  CreditCard
+  CreditCard,
+  Activity
 } from "lucide-react";
 import { Link, useLocation } from "react-router";
 import { auth } from "../../lib/auth";
@@ -28,6 +29,7 @@ const navItems = [
   { path: "/search", label: "AI Search", icon: Sparkles },
   { path: "/leads", label: "Leads", icon: Users },
   { path: "/reports", label: "Reports", icon: FileText },
+  { path: "/telemetry", label: "Telemetry", icon: Activity },
 ];
 
 const secondaryItems = [
