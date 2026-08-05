@@ -476,6 +476,21 @@ async def delete_webhook(
     return {"status": "deleted", "id": subscription_id}
 
 
+# ── Audit Log Endpoints ───────────────────────────────────────────────────────
+
+from audit import log_audit_event, extract_client_info
+
+@app.get("/api/audit-logs")
+async def get_audit_trail(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    tenant_user: auth.TokenData = Depends(auth.get_current_tenant_user)
+):
+    logs = crud.get_audit_logs(db, organization_id=tenant_user.organization_id, skip=skip, limit=limit)
+    return logs
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

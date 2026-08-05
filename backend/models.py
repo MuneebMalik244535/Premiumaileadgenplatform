@@ -91,3 +91,17 @@ class WebhookSubscription(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     organization = relationship("Organization", back_populates="webhooks")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    user_email = Column(String(255), nullable=True, index=True)
+    action = Column(String(100), nullable=False, index=True)
+    resource = Column(String(255), nullable=False)
+    ip_address = Column(String(100), default="127.0.0.1")
+    user_agent = Column(String(255), default="")
+    details = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

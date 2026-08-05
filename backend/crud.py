@@ -159,3 +159,12 @@ def delete_webhook_subscription(db: Session, subscription_id: int, organization_
         db.commit()
         return True
     return False
+
+
+# ── Audit Logs CRUD ──────────────────────────────────────────────────────────
+
+def get_audit_logs(db: Session, organization_id: Optional[int] = None, skip: int = 0, limit: int = 100) -> List[models.AuditLog]:
+    q = db.query(models.AuditLog)
+    if organization_id is not None:
+        q = q.filter(models.AuditLog.organization_id == organization_id)
+    return q.order_by(models.AuditLog.created_at.desc()).offset(skip).limit(limit).all()
