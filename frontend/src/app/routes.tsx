@@ -6,6 +6,7 @@ import { LeadsManagement } from "./components/LeadsManagement";
 import { Reports } from "./components/Reports";
 import { Settings } from "./components/Settings";
 import { Telemetry } from "./components/Telemetry";
+import { AuditLogs } from "./components/AuditLogs";
 import { Login } from "./components/Login";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
       { path: "reports", Component: Reports },
       { path: "settings", Component: Settings },
       { path: "telemetry", Component: Telemetry },
+      { path: "audit-logs", Component: AuditLogs },
     ],
   },
 ]);
