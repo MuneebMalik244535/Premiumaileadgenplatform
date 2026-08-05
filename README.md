@@ -9,28 +9,28 @@
 
 ```mermaid
 graph TD
-    Client[Browser / User] --> Gateway[Nginx Reverse Proxy / Gateway :80]
+    Client["Browser / User"] --> Gateway["Nginx Reverse Proxy Gateway (:80)"]
     
     subgraph Frontend Tier
-        Gateway -->|/| UI[React + Vite SPA]
+        Gateway -->|/| UI["React + Vite SPA"]
     end
     
     subgraph Security & API Tier
-        Gateway -->|/api/*| API[FastAPI Core Server :8000]
-        Gateway -->|/api/ws| WS[WebSocket Live Logger]
-        API -->|JWT Authentication| AuthModule[Bcrypt Auth & JWT]
+        Gateway -->|/api/*| API["FastAPI Core Server (:8000)"]
+        Gateway -->|/api/ws| WS["WebSocket Live Logger"]
+        API -->|JWT Authentication| AuthModule["Bcrypt Auth & JWT"]
     end
 
     subgraph Asynchronous Execution Tier
-        API -->|Enqueue Scrape Task| Redis[(Redis Broker :6379)]
-        Redis --> Worker1[Celery Worker 1 (Playwright/SerpAPI)]
-        Redis --> Worker2[Celery Worker 2 (Gemini AI Scoring)]
-        Worker1 & Worker2 -->|Publish Progress| PubSub[Redis PubSub]
+        API -->|Enqueue Scrape Task| Redis[("Redis Broker :6379")]
+        Redis --> Worker1["Celery Worker 1 (Playwright/SerpAPI)"]
+        Redis --> Worker2["Celery Worker 2 (Gemini AI Scoring)"]
+        Worker1 & Worker2 -->|Publish Progress| PubSub["Redis PubSub"]
         PubSub --> WS
     end
 
     subgraph Persistence Tier
-        API -->|Read/Write Leads| DB[(PostgreSQL 15 Database)]
+        API -->|Read/Write Leads| DB[("PostgreSQL 15 Database")]
         Worker1 & Worker2 -->|Store Results| DB
     end
 ```
