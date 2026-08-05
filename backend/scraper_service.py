@@ -10,6 +10,8 @@ import requests
 from bs4 import BeautifulSoup
 import google.generativeai as genai
 
+from proxy_manager import ProxyPoolManager
+
 load_dotenv()
 
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
@@ -20,6 +22,9 @@ if GEMINI_API_KEY:
     gemini_model = genai.GenerativeModel("models/gemini-1.5-flash")
 else:
     gemini_model = None
+
+# Global default Proxy Pool Manager
+proxy_manager = ProxyPoolManager()
 
 # ── Known directory / listing sites ──────────────────────────────────────────
 DIRECTORY_DOMAINS = [
@@ -40,54 +45,47 @@ def is_directory(url: str) -> bool:
         return False
 
 
-def fetch_page_content(url: str, timeout: int = 10, proxies: dict | None = None) -> dict:
-    """Fetch a page and return text, mailto links, and contact-page links."""
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        )
-    }
-    for attempt in range(2):
-        try:
-            resp = requests.get(url, timeout=timeout, headers=headers, proxies=proxies)
-            if resp.status_code != 200:
+def fetch_page_content(url: str, timeout: int = 10, proxies: dict | None = None, manager: ProxyPoolManager | None = None) -> dict:
+    """Fetch a page with rotating proxies, anti-bot user-agents, and contact-page extraction."""
+    active_manager = manager or proxy_manager
+    resp = active_manager.fetch_with_retry(url, max_retries=2, timeout=timeout)
+    
+    if not resp or resp.status_code != 200:
+        return {"text": "", "contact_links": [], "emails": [], "html": ""}
+
+    try:
+        soup = BeautifulSoup(resp.text, "html.parser")
+        contact_keywords = ["contact", "about", "reach", "support", "get-in-touch", "info", "hire"]
+        contact_links, emails = [], []
+
+        for a in soup.find_all("a", href=True):
+            link_text = a.get_text().lower().strip()
+            href = a["href"].lower()
+
+            if href.startswith("mailto:"):
+                email = href.replace("mailto:", "").split("?")[0].strip()
+                if email and "@" in email and email not in emails:
+                    emails.append(email)
                 continue
 
-            soup = BeautifulSoup(resp.text, "html.parser")
-            contact_keywords = ["contact", "about", "reach", "support", "get-in-touch", "info", "hire"]
-            contact_links, emails = [], []
+            if any(kw in link_text or kw in href for kw in contact_keywords):
+                full_url = urllib.parse.urljoin(url, a["href"])
+                if full_url not in contact_links and "google.com" not in full_url:
+                    contact_links.append(full_url)
 
-            for a in soup.find_all("a", href=True):
-                link_text = a.get_text().lower().strip()
-                href = a["href"].lower()
+        # Strip scripts/styles then get text
+        for tag in soup(["script", "style", "noscript"]):
+            tag.extract()
+        text = soup.get_text(separator=" ", strip=True)
 
-                if href.startswith("mailto:"):
-                    email = href.replace("mailto:", "").split("?")[0].strip()
-                    if email and "@" in email and email not in emails:
-                        emails.append(email)
-                    continue
-
-                if any(kw in link_text or kw in href for kw in contact_keywords):
-                    full_url = urllib.parse.urljoin(url, a["href"])
-                    if full_url not in contact_links and "google.com" not in full_url:
-                        contact_links.append(full_url)
-
-            # Strip scripts/styles then get text
-            for tag in soup(["script", "style", "noscript"]):
-                tag.extract()
-            text = soup.get_text(separator=" ", strip=True)
-
-            return {
-                "text": text[:10000],
-                "contact_links": contact_links[:8],
-                "emails": emails,
-                "html": resp.text,
-            }
-        except Exception:
-            pass
-    return {"text": "", "contact_links": [], "emails": [], "html": ""}
+        return {
+            "text": text[:10000],
+            "contact_links": contact_links[:8],
+            "emails": emails,
+            "html": resp.text,
+        }
+    except Exception:
+        return {"text": "", "contact_links": [], "emails": [], "html": ""}
 
 
 def extract_emails_regex(text: str) -> list:
@@ -384,6 +382,7 @@ class LeadScraper:
         
         raw_proxies = os.getenv("PROXY_LIST", "")
         self.proxies = [p.strip() for p in raw_proxies.split(",") if p.strip()]
+        self.proxy_manager = ProxyPoolManager(proxy_list=self.proxies, log_fn=self.log)
 
         # Initialize Specialized Agents
         self.search_agent = SearchAgent(self.serpapi_key, self.log)
